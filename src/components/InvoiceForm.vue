@@ -28,6 +28,12 @@ const currentBranchCustomers = computed(() =>
     customerStore.customers.filter(c => c.branchId === branchStore.activeBranchId)
 )
 
+// 1. Create a sorted version of the branch customers
+// This only recalculates when the customer list changes, NOT when you type.
+const sortedBranchCustomers = computed(() => {
+    return [...currentBranchCustomers.value].sort((a, b) => a.name.localeCompare(b.name))
+})
+
 const form = ref({
   date: format(new Date(), 'yyyy-MM-dd'),
   receivedFrom: '',
@@ -47,21 +53,34 @@ const showSuggestions = ref(false)
 const filteredCustomers = computed(() => {
     if (!form.value.receivedFrom) return []
     const query = form.value.receivedFrom.toLowerCase()
-    return [...currentBranchCustomers.value] // Clone before sorting
+    
+    // Optimization: If query is empty, don't return anything (already handled above)
+    
+    return sortedBranchCustomers.value
         .filter(c => c.name.toLowerCase().includes(query))
-        .sort((a, b) => a.name.localeCompare(b.name))
-        .slice(0, 5) // match limit
+        .slice(0, 5)
 })
 
 function selectCustomer(customer: any) {
+    // 1. Update values
     form.value.receivedFrom = customer.name
     form.value.contact = customer.contact || ''
+    
+    // 2. FORCE close the suggestions immediately
     showSuggestions.value = false
 }
 
 const inventoryStore = useInventoryStore()
 const { items: inventoryItems } = storeToRefs(inventoryStore)
 const activeItemIndex = ref<number | null>(null)
+
+// 1. Pre-sort inventory items for the active branch
+const sortedInventoryItems = computed(() => {
+    const activeBranchId = branchStore.activeBranchId
+    return inventoryItems.value
+        .filter(i => i.branchId === activeBranchId)
+        .sort((a, b) => a.name.localeCompare(b.name))
+})
 
 const filteredInventory = computed(() => {
     if (activeItemIndex.value === null) return []
@@ -70,16 +89,12 @@ const filteredInventory = computed(() => {
     const currentInput = item.description.toLowerCase()
     if (!currentInput) return []
     
-    const activeBranchId = branchStore.activeBranchId
-    
-    return inventoryItems.value
-        .filter(i => {
-            // Strict Branch Filter
-            return i.branchId === activeBranchId && (
-                i.name.toLowerCase().includes(currentInput) || 
-                (i.description && i.description.toLowerCase().includes(currentInput))
-            )
-        })
+    // Use the pre-sorted list
+    return sortedInventoryItems.value
+        .filter(i => 
+            i.name.toLowerCase().includes(currentInput) || 
+            (i.description && i.description.toLowerCase().includes(currentInput))
+        )
         .slice(0, 5)
 })
 
@@ -91,6 +106,7 @@ function selectInventoryItem(item: InventoryItem, index: number) {
         formItem.amount = item.price
         formItem.quantity = 1
     }
+    // FORCE close the suggestions
     activeItemIndex.value = null
 }
 
@@ -99,12 +115,12 @@ const customerSearch = ref('')
 
 const modalFilteredCustomers = computed(() => {
     const q = customerSearch.value.toLowerCase()
-    return [...currentBranchCustomers.value] // Clone before sort
+    // Use the pre-sorted list!
+    return sortedBranchCustomers.value
         .filter(c => 
             c.name.toLowerCase().includes(q) || 
             (c.contact && c.contact.toLowerCase().includes(q))
         )
-        .sort((a, b) => a.name.localeCompare(b.name))
 })
 
 function selectCustomerFromModal(customer: any) {
