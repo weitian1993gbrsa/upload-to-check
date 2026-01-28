@@ -1,0 +1,67 @@
+{
+  "name": "receipt-system",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "productName": "GBRSA Invoice System",
+  "description": "Professional Invoice and Receipt Management System for GBRSA",
+  "author": "GB Rope Skipping Academy",
+  "scripts": {
+    "dev": "vite",
+    "build": "vue-tsc -b && vite build",
+    "preview": "vite preview",
+    "electron:dev": "vite",
+    "electron:build": "vue-tsc -b && vite build && electron-builder"
+  },
+  "main": "dist-electron/main.mjs",
+  "dependencies": {
+    "@vueuse/core": "^14.1.0",
+    "date-fns": "^4.1.0",
+    "dayjs": "^1.11.19",
+    "electron-store": "^11.0.2",
+    "html2pdf.js": "^0.14.0",
+    "jspdf": "^4.0.0",
+    "lucide-vue-next": "^0.562.0",
+    "pdf-lib": "^1.17.1",
+    "pdfmake": "^0.3.3",
+    "pinia": "^3.0.4",
+    "vue": "^3.5.24"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "@types/pdfmake": "^0.2.12",
+    "@vitejs/plugin-vue": "^6.0.1",
+    "@vue/tsconfig": "^0.8.1",
+    "autoprefixer": "^10.4.23",
+    "concurrently": "^9.2.1",
+    "electron": "^40.0.0",
+    "electron-builder": "^26.4.0",
+    "postcss": "^8.5.6",
+    "tailwindcss": "^3.4.19",
+    "typescript": "~5.9.3",
+    "vite": "^7.2.4",
+    "vite-plugin-electron": "^0.29.0",
+    "vite-plugin-electron-renderer": "^0.14.6",
+    "vue-tsc": "^3.1.4",
+    "wait-on": "^9.0.3"
+  },
+  "build": {
+    "appId": "com.gbrope.invoice",
+    "productName": "GBRSA Invoice System",
+    "icon": "public/icon.png",
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "icon": "public/icon.ico"
+    },
+    "directories": {
+      "output": "dist_electron"
+    }
+  }
+}
