@@ -12,9 +12,15 @@ const branchStore = useBranchStore()
 
 // REMOVED: const { currentBranchCustomers } = storeToRefs(customerStore)
 
+// OPTIMIZATION STEP 1: Get raw list for branch
 const currentBranchCustomers = computed(() => 
     customerStore.customers.filter(c => c.branchId === branchStore.activeBranchId)
 )
+
+// OPTIMIZATION STEP 2: Sort ONCE. This only updates when the list changes, not when you type.
+const sortedBranchCustomers = computed(() => {
+    return [...currentBranchCustomers.value].sort((a, b) => a.name.localeCompare(b.name))
+})
 
 const searchQuery = ref('')
 const isAdding = ref(false)
@@ -136,13 +142,12 @@ function deleteCustomer(id: string) {
   }
 }
 
+// OPTIMIZATION STEP 3: Filter the already-sorted list. Fast!
 const filteredAndSortedCustomers = computed(() => {
-    let result = [...currentBranchCustomers.value]
-    if (searchQuery.value) {
-        const q = searchQuery.value.toLowerCase()
-        result = result.filter(c => c.name.toLowerCase().includes(q))
-    }
-    return [...result].sort((a, b) => a.name.localeCompare(b.name))
+    if (!searchQuery.value) return sortedBranchCustomers.value
+    
+    const q = searchQuery.value.toLowerCase()
+    return sortedBranchCustomers.value.filter(c => c.name.toLowerCase().includes(q))
 })
 
 

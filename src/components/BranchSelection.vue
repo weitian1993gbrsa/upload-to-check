@@ -2,7 +2,7 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import { useBranchStore, type Branch } from '../stores/branchStore'
 import { useReceiptStore } from '../stores/receiptStore'
-import { Plus, Building2, Copy, Pencil, Trash2, ArrowRight, Settings, Database, X, Move, FolderOpen } from 'lucide-vue-next'
+import { Plus, Building2, Copy, Pencil, Trash2, ArrowRight, Settings, Database, X, Move, FolderOpen, Folder } from 'lucide-vue-next'
 import InvoicePreview from './InvoicePreview.vue'
 import BackupManager from './BackupManager.vue'
 import { useElectron } from '../composables/useElectron'
@@ -11,12 +11,14 @@ const { selectDirectory } = useElectron()
 
 const branchStore = useBranchStore()
 const receiptStore = useReceiptStore()
+
 // Modal state
 const isModalOpen = ref(false)
 const isSettingsOpen = ref(false)
+const isBackupOpen = ref(false)
+const isPathsOpen = ref(false)
 const modalMode = ref<'create' | 'edit'>('create')
 const editingId = ref('')
-const isBackupOpen = ref(false)
 
 const form = ref<Omit<Branch, 'id'>>({
     name: '',
@@ -53,7 +55,6 @@ const previewDummyReceipt = {
     receiptNumber: 'PREVIEW-001',
     date: new Date().toISOString(),
     receivedFrom: 'Sample Client Name',
-    // receiptNumber is string in store, so this is fine
     studentName: 'Student Name', 
     items: [
         { description: 'Service Fee', amount: 100, quantity: 1, discount: 0 },
@@ -121,7 +122,7 @@ function resizeImage(base64Str: string, maxWidth = 300): Promise<string> {
         canvas.height = height
         const ctx = canvas.getContext('2d')
         ctx?.drawImage(img, 0, 0, width, height)
-        resolve(canvas.toDataURL('image/jpeg', 0.7)) // Compress to 0.7 quality jpeg
+        resolve(canvas.toDataURL('image/jpeg', 0.7))
         }
     })
 }
@@ -133,7 +134,6 @@ function handleLogoUpload(event: Event, type: 'branch' | 'global') {
     const reader = new FileReader()
     reader.onload = async (e) => {
         const base64 = e.target?.result as string
-        // Resize and compress
         const resized = await resizeImage(base64)
         
         if (type === 'global') {
@@ -156,8 +156,6 @@ function saveBranch() {
         const branch = branchStore.branches.find(b => b.id === editingId.value)
         if (branch) {
             branchStore.updateBranch(editingId.value, form.value)
-            
-            // Automatically migrate all historical receipts to the new numeric format
             receiptStore.updateReceiptPrefix(editingId.value, form.value.receiptPrefix)
         }
     }
@@ -198,27 +196,22 @@ function onDragStart(index: number, event: DragEvent) {
     draggedIndex.value = index
     if (event.dataTransfer) {
         event.dataTransfer.effectAllowed = 'move'
-        // Make the drag image clearer
         event.dataTransfer.dropEffect = 'move'
     }
 }
 
 function onDrop(dropIndex: number) {
     if (draggedIndex.value === null || draggedIndex.value === dropIndex) return
-    
     branchStore.reorderBranches(draggedIndex.value, dropIndex)
     draggedIndex.value = null
 }
 
 function handleKeydown(e: KeyboardEvent) {
     if (e.key === 'Escape') {
-        if (isModalOpen.value) {
-            isModalOpen.value = false
-        } else if (isSettingsOpen.value) {
-            isSettingsOpen.value = false
-        } else if (isBackupOpen.value) {
-            isBackupOpen.value = false
-        }
+        if (isModalOpen.value) isModalOpen.value = false
+        else if (isSettingsOpen.value) isSettingsOpen.value = false
+        else if (isBackupOpen.value) isBackupOpen.value = false
+        else if (isPathsOpen.value) isPathsOpen.value = false
     }
 }
 
@@ -234,11 +227,14 @@ onUnmounted(() => {
 
 <template>
   <div class="min-h-screen bg-gray-50 flex flex-col items-center py-12 px-4 sm:px-6 lg:px-8">
-    <div class="max-w-5xl w-full space-y-8">
+    <div class="w-full px-4 space-y-8">
       <div class="text-center relative">
         <h2 class="mt-6 text-3xl font-extrabold text-gray-900">GBRSA Invoice System</h2>
         
-        <div class="absolute top-0 right-0 lg:right-[-60px] flex flex-col gap-4">
+        <div class="absolute top-0 right-0 flex flex-row gap-2">
+            <button @click="isPathsOpen = true" class="text-gray-400 hover:text-blue-600 bg-white p-2 rounded-full shadow-sm hover:shadow transition-all border border-gray-100" title="Manage Save Paths">
+                <Folder :size="24" />
+            </button>
             <button @click="openSettingsModal" class="text-gray-400 hover:text-gray-700 bg-white p-2 rounded-full shadow-sm hover:shadow transition-all border border-gray-100" title="Global Settings">
                 <Settings :size="24" />
             </button>
@@ -249,7 +245,6 @@ onUnmounted(() => {
       </div>
 
       <div class="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-        <!-- Existing Branches -->
         <div 
             v-for="(branch, index) in branchStore.branches" 
             :key="branch.id"
@@ -262,21 +257,11 @@ onUnmounted(() => {
             class="relative group bg-white p-6 rounded-lg shadow-sm hover:shadow-md transition-all cursor-pointer border border-gray-200 flex flex-col h-full items-center text-center justify-center min-h-[200px]"
             :class="{ 'border-blue-500 border-2 bg-blue-50': draggedIndex === index }"
         >
-            <!-- Drag Handle (Top Left) -->
             <div class="absolute top-2 left-2 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity cursor-move p-1">
                 <Move :size="16" />
             </div>
 
-            <!-- Actions (Hidden by default, show on hover) -->
             <div class="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity" @click.stop>
-                <button 
-                    @click="e => pickBranchFolder(branch, e)" 
-                    class="p-1 rounded bg-white shadow-sm border"
-                    :class="branch.pdfFolderPath ? 'text-blue-600 border-blue-200' : 'text-gray-400 border-gray-100 hover:text-blue-600'"
-                    :title="branch.pdfFolderPath ? 'Change PDF Folder' : 'Set PDF Folder'"
-                >
-                    <FolderOpen :size="14" />
-                </button>
                 <button @click="e => edit(branch, e)" class="p-1 text-gray-400 hover:text-blue-600 rounded bg-white shadow-sm" title="Edit">
                     <Pencil :size="14" />
                 </button>
@@ -288,7 +273,6 @@ onUnmounted(() => {
                 </button>
             </div>
 
-            <!-- Card Content (Simple) -->
             <div class="h-14 w-14 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 font-bold mb-4">
                 <img v-if="branch.logo" :src="branch.logo" class="h-full w-full object-cover rounded-full" />
                 <Building2 v-else :size="28" />
@@ -302,7 +286,6 @@ onUnmounted(() => {
             </div>
         </div>
 
-        <!-- Add New Branch Card -->
         <button 
             @click="openCreateModal"
             class="bg-gray-50 border-2 border-dashed border-gray-300 p-6 rounded-lg hover:border-blue-400 hover:bg-blue-50 transition-colors flex flex-col items-center justify-center text-center h-full min-h-[200px]"
@@ -313,7 +296,6 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <!-- Create/Edit Modal -->
     <div v-if="isModalOpen" class="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
         <div class="bg-white rounded-lg shadow-xl max-w-lg w-full p-6 max-h-[90vh] overflow-y-auto">
             <h3 class="text-xl font-bold text-gray-800 mb-4">{{ modalMode === 'create' ? 'Add New Client' : 'Edit Client' }}</h3>
@@ -376,14 +358,12 @@ onUnmounted(() => {
         </div>
     </div>
 
-    <!-- Global Settings Modal (Wide for Preview) -->
     <div v-if="isSettingsOpen" class="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
         <div class="bg-white rounded-lg shadow-xl max-w-6xl w-full p-6 max-h-[90vh] flex flex-col">
             <h3 class="text-xl font-bold text-gray-800 mb-1">Global Configuration</h3>
             <p class="text-sm text-gray-500 mb-6 border-b pb-4">Set default company details. Use the preview to verify how they look.</p>
 
             <div class="flex gap-8 overflow-hidden h-full">
-                <!-- Form Side -->
                 <div class="w-1/3 overflow-y-auto pr-2 space-y-5 custom-scrollbar">
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-1">Company Name</label>
@@ -403,7 +383,6 @@ onUnmounted(() => {
                         </div>
                     </div>
 
-                    <!-- Logo Style Settings -->
                     <div class="p-3 bg-gray-50 rounded-lg border border-gray-200 space-y-4">
                         <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider">Logo Overlay Settings</label>
                         
@@ -439,11 +418,9 @@ onUnmounted(() => {
                     </div>
                 </div>
 
-                <!-- Preview Side -->
                 <div class="w-2/3 bg-gray-200 rounded-lg p-4 flex flex-col items-center justify-start overflow-hidden border border-gray-300 relative h-[660px]">
                     <h4 class="absolute top-4 left-6 text-xs font-bold text-gray-400 uppercase tracking-widest z-10">Live Preview</h4>
                     
-                    <!-- Scale wrapper -->
                     <div class="w-full h-full flex justify-center items-start pt-5">
                         <div class="transform scale-[0.55] origin-top shadow-2xl">
                              <InvoicePreview :receipt="previewDummyReceipt" :branchOverride="settingsForm" />
@@ -454,7 +431,6 @@ onUnmounted(() => {
         </div>
     </div>
 
-    <!-- Backup Modal -->
     <div v-if="isBackupOpen" class="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
         <div class="bg-white rounded-lg shadow-xl max-w-4xl w-full p-6 max-h-[90vh] flex flex-col relative">
             <button @click="isBackupOpen = false" class="absolute top-4 right-4 text-gray-400 hover:text-gray-600">
@@ -470,11 +446,50 @@ onUnmounted(() => {
             </div>
         </div>
     </div>
+
+    <div v-if="isPathsOpen" class="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+        <div class="bg-white rounded-lg shadow-xl max-w-2xl w-full p-6 max-h-[90vh] flex flex-col relative">
+            <button @click="isPathsOpen = false" class="absolute top-4 right-4 text-gray-400 hover:text-gray-600">
+                <X :size="20" />
+            </button>
+            <h3 class="text-xl font-bold text-gray-800 mb-6 flex items-center gap-2">
+                <Folder :size="24" class="text-blue-600" />
+                Manage Save Locations
+            </h3>
+            <p class="text-sm text-gray-500 mb-4">Select where invoices are saved for each profile.</p>
+            
+            <div class="space-y-3 overflow-y-auto custom-scrollbar pr-2">
+                <div v-for="branch in branchStore.branches" :key="branch.id" class="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50 transition-colors">
+                    <div class="flex items-center gap-3">
+                         <div class="w-10 h-10 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center font-bold text-xs overflow-hidden">
+                            <img v-if="branch.logo" :src="branch.logo" class="w-full h-full object-cover" />
+                            <span v-else>{{ branch.receiptPrefix.substring(0, 2) }}</span>
+                        </div>
+                        <div>
+                            <div class="font-bold text-gray-800">{{ branch.name }}</div>
+                            <div class="text-xs font-mono break-all" :class="branch.pdfFolderPath ? 'text-gray-500' : 'text-red-500'">
+                                {{ branch.pdfFolderPath || 'No folder selected' }}
+                            </div>
+                        </div>
+                    </div>
+                    <button 
+                        @click="e => pickBranchFolder(branch, e)"
+                        class="px-3 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-blue-50 hover:border-blue-200 hover:text-blue-700 transition-all flex items-center gap-2"
+                    >
+                        <FolderOpen :size="16" /> Change
+                    </button>
+                </div>
+            </div>
+            
+            <div class="mt-6 flex justify-end">
+                <button @click="isPathsOpen = false" class="px-4 py-2 bg-gray-100 text-gray-700 rounded hover:bg-gray-200 text-sm font-medium">Close</button>
+            </div>
+        </div>
+    </div>
   </div>
 </template>
 
 <style scoped>
-/* Custom scrollbar for the preview area */
 .custom-scrollbar::-webkit-scrollbar {
   width: 8px;
 }

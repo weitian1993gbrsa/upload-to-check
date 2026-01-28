@@ -18,18 +18,20 @@ const form = ref({
     description: ''
 })
 
-// Filtered Items
+// OPTIMIZATION: Filter items by branch first
+const branchItems = computed(() => {
+    return inventoryStore.items.filter(item => item.branchId === branchStore.activeBranchId)
+})
+
+// Filtered Items for Display
 const filteredItems = computed(() => {
     const q = searchQuery.value.toLowerCase()
-    const activeBranchId = branchStore.activeBranchId
+    if (!q) return branchItems.value
     
-    return inventoryStore.items.filter(item => {
-        // Strict Filter: show ONLY if matches active branch
-        return item.branchId === activeBranchId && (
-            item.name.toLowerCase().includes(q) || 
-            item.description.toLowerCase().includes(q)
-        )
-    })
+    return branchItems.value.filter(item => 
+        item.name.toLowerCase().includes(q) || 
+        item.description.toLowerCase().includes(q)
+    )
 })
 
 // Drag and Drop Logic
@@ -44,23 +46,46 @@ function onDrop(_event: DragEvent, dropIndex: number) {
     if (draggedItemIndex.value === null) return
     const draggedIndex = draggedItemIndex.value
     
-    // Only allow reordering if search query is empty
     if (searchQuery.value) {
         alert('Please clear search to reorder items.')
         return
     }
 
-    // Find the global indices for the item being dragged and the drop target
     const itemToMove = filteredItems.value[draggedIndex]
     const itemTarget = filteredItems.value[dropIndex]
     
     if (itemToMove && itemTarget) {
+        // Find real indices in the global store
         const globalDraggedIndex = inventoryStore.items.findIndex(i => i.id === itemToMove.id)
         const globalDropIndex = inventoryStore.items.findIndex(i => i.id === itemTarget.id)
         
         if (globalDraggedIndex !== -1 && globalDropIndex !== -1) {
-            inventoryStore.items.splice(globalDraggedIndex, 1)
-            inventoryStore.items.splice(globalDropIndex, 0, itemToMove)
+            // FIX: Robust Move Logic
+            // 1. Remove the item
+            const [movedItem] = inventoryStore.items.splice(globalDraggedIndex, 1)
+            
+            // 2. Adjust drop index if needed
+            // If we removed an item that was BEFORE our target, the target's index has shifted down by 1.
+            let insertIndex = globalDropIndex
+            if (globalDraggedIndex < globalDropIndex) {
+                // Determine if we want to insert 'after' the target (since we dropped ON it) or strictly at its index
+                // Standard drag-drop usually means "take this slot".
+                // Since the array shifted, 'globalDropIndex' now points to the item *after* the original target
+                // No, wait. 
+                // [A, B, C]. Target C (2). Drag A (0).
+                // Remove A: [B, C]. C is now at 1.
+                // globalDropIndex was 2.
+                // If we insert at 2: [B, C, A]. A is after C.
+                // If we want A before C, we should insert at 1.
+                // So if dragged < drop, we decrement the insert index.
+                insertIndex = globalDropIndex - 1
+            }
+            // However, usually we want to drop "in place of". 
+            // If I drag A to C's position, I want A to be where C was.
+            // Simplified logic: Remove, then insert at updated index of target.
+            
+            const newTargetIndex = inventoryStore.items.findIndex(i => i.id === itemTarget.id)
+            inventoryStore.items.splice(newTargetIndex, 0, movedItem)
         }
     }
 

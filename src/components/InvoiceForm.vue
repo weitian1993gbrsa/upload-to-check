@@ -373,7 +373,7 @@ defineExpose({
 
 <template>
   <div class="receipt-form-wrapper">
-    <div class="max-w-3xl mx-auto h-full">
+    <div class="w-full mx-auto h-full">
     <!-- Left Column: Input Form -->
     <div class="space-y-6">
         <div class="bg-white p-6 rounded-lg shadow-sm border border-gray-200">

@@ -147,8 +147,8 @@ function handleEditReceipt(receipt: Receipt) {
 <template>
   <BranchSelection v-if="showSelection" />
   
-  <div v-else class="min-h-screen bg-gray-100 p-4 printable-container-parent">
-    <div class="w-full max-w-6xl mx-auto bg-white shadow-lg rounded-lg min-h-[80vh] flex flex-col printable-container-parent">
+  <div v-else class="h-screen overflow-hidden bg-gray-100 p-4 printable-container-parent">
+    <div class="w-full mx-auto bg-white shadow-lg rounded-lg h-full flex flex-col printable-container-parent px-6">
       <!-- Header -->
       <header class="flex justify-between items-center p-6 border-b no-print pointer-events-auto">
         <div class="flex items-center gap-4">

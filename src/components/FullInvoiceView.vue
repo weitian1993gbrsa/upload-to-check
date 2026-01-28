@@ -321,7 +321,7 @@ const emit = defineEmits<{
     <div class="flex-grow overflow-y-auto p-8 custom-scrollbar">
         
         <!-- MODE 1: HIGH-DENSITY LIST -->
-        <div v-if="viewMode === 'gallery'" class="max-w-6xl mx-auto">
+        <div v-if="viewMode === 'gallery'" class="w-full">
             <div class="bg-gray-50/50 rounded-3xl border border-gray-100 overflow-hidden">
                 <div 
                     v-for="customer in filteredAndSortedCustomers" 
@@ -376,7 +376,7 @@ const emit = defineEmits<{
         </div>
 
         <!-- MODE 2: FULL-WIDTH DETAIL HISTORY -->
-        <div v-else class="max-w-5xl mx-auto space-y-6">
+        <div v-else class="w-full space-y-6">
             <!-- Simplified Header Removed -->
             <div class="h-4"></div>
 
