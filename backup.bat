@@ -1,66 +1,51 @@
 @echo off
-setlocal
+setlocal enabledelayedexpansion
 
-:: --------------------------------------------------------
-:: PROJECT SOURCE BACKUP SCRIPT (FIXED)
-:: --------------------------------------------------------
+:: Set source directory to the script's location
+set "SOURCE_DIR=%~dp0"
+cd /d "%SOURCE_DIR%"
 
-:: 1. Get robust timestamp using PowerShell (Avoids locale issues)
-for /f "usebackq tokens=*" %%a in (`powershell -Command "Get-Date -Format 'yyyy-MM-dd_HHmm'"`) do set "TIMESTAMP=%%a"
+:: Create backups directory if it doesn't exist
+if not exist "backups" (
+    mkdir "backups"
+)
 
-:: 2. Robust Path Handling
-:: %~dp0 contains a trailing backslash which escapes quotes in some commands.
-:: We strip it here to be safe.
-set "SOURCE=%~dp0"
-if "%SOURCE:~-1%"=="\" set "SOURCE=%SOURCE:~0,-1%"
+:: Get current date and time for folder name (YYYY-MM-DD_HH-MM-SS format)
+for /f "tokens=2 delims==" %%I in ('wmic os get localdatetime /value') do set datetime=%%I
+set "TIMESTAMP=%datetime:~0,4%-%datetime:~4,2%-%datetime:~6,2%_%datetime:~8,2%-%datetime:~10,2%-%datetime:~12,2%"
 
-set "BACKUP_ROOT=%SOURCE%\.."
-set "DEST=%BACKUP_ROOT%\Source_%TIMESTAMP%"
+set "BACKUP_DIR=backups\namelist system_%TIMESTAMP%"
+mkdir "%BACKUP_DIR%"
 
-echo.
-echo ========================================================
-echo   BACKING UP PROJECT SOURCE CODE
-echo ========================================================
-echo.
-echo   [Time]    %TIMESTAMP%
-echo   [Source]  "%SOURCE%"
-echo   [Target]  "%DEST%"
-echo.
-echo   Please wait...
+echo Backing up to %BACKUP_DIR%...
 
-:: 3. Run Robocopy
-:: Uses simple quotes around paths that now definitely don't have trailing backslashes.
-robocopy "%SOURCE%" "%DEST%" /E /XD "node_modules" ".git" ".gemini" "dist" "dist_electron" "dist-electron" "dist_electron_beta" ".vscode" ".idea" "coverage" "release" /XF "*.log" "*.tmp" "Backup_Source_Code.bat" /R:0 /W:0 /NJH /NJS
+:: Copy specific files and folders
+echo Copying Configuration Files...
+copy "package.json" "%BACKUP_DIR%\" >nul
+copy "package-lock.json" "%BACKUP_DIR%\" >nul
+copy "vite.config.ts" "%BACKUP_DIR%\" >nul
+copy "tsconfig*.json" "%BACKUP_DIR%\" >nul
+copy "tailwind.config.js" "%BACKUP_DIR%\" >nul
+copy "postcss.config.js" "%BACKUP_DIR%\" >nul
+copy "index.html" "%BACKUP_DIR%\" >nul
+copy "env.d.ts" "%BACKUP_DIR%\" >nul
+copy "README.md" "%BACKUP_DIR%\" >nul
+copy ".gitignore" "%BACKUP_DIR%\" >nul
 
-if %ERRORLEVEL% GTR 7 (
-    echo.
-    echo   [ERROR] Backup encountered errors.
-    pause
-    exit /b
+:: Copy Scripts
+echo Copying Scripts...
+copy "start_app.bat" "%BACKUP_DIR%\" >nul
+copy "backup.bat" "%BACKUP_DIR%\" >nul
+
+:: Copy Directories
+echo Copying Source Code...
+xcopy "src" "%BACKUP_DIR%\src" /E /I /Y >nul
+if exist "public" (
+    echo Copying Public Assets...
+    xcopy "public" "%BACKUP_DIR%\public" /E /I /Y >nul
 )
 
 echo.
-echo   [COMPRESSING] Zipping backup folder...
+echo Backup completed successfully at %BACKUP_DIR%
 echo.
-
-set "ZIP_FILE=%BACKUP_ROOT%\gbrsa-invoice-system_%TIMESTAMP%.zip"
-
-powershell -Command "Compress-Archive -Path '%DEST%\*' -DestinationPath '%ZIP_FILE%'"
-
-if exist "%ZIP_FILE%" (
-    echo.
-    echo   [CLEANUP] Removing temporary folder...
-    rmdir /s /q "%DEST%"
-    echo.
-    echo   [SUCCESS] Backup Zipped: %ZIP_FILE%
-) else (
-    echo.
-    echo   [ERROR] Failed to create zip file.
-)
-
-echo.
-echo ========================================================
-echo.
-echo Closing in 3 seconds...
-timeout /t 3
-exit
+pause

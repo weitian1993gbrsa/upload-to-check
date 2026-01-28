@@ -36,11 +36,9 @@ const currentBranchCustomers = computed(() =>
 
 const activeReceipt = ref<Receipt | null>(null)
 const receiptFormRef = ref<ComponentPublicInstance | null>(null)
-// If no branch is active (or we define a "null" state), show selection.
 const showSelection = computed(() => !activeBranchId.value)
 
 onMounted(() => {
-    // Initialize Local Stores (No Auth Required)
     console.log("Initializing Local Stores...")
     branchStore.initListeners() 
     receiptStore.initReceiptsListener()
@@ -58,8 +56,6 @@ async function handleReceiptSaved(receiptId: string) {
     const receipt = receiptStore.receipts.find(r => r.id === receiptId)
     if (receipt) {
         activeReceipt.value = receipt
-        
-        // Short delay to ensure UI updates before PDF generation
         if ((window as any).invoiceApi) {
             setTimeout(async () => {
                 await downloadPDF(true)
@@ -71,7 +67,6 @@ async function handleReceiptSaved(receiptId: string) {
     }
 }
 
-// Reset tab to Sales whenever a profile is selected/switched
 watch(activeBranchId, (newId: string) => {
     if (newId) {
         activeTab.value = 'history'
@@ -86,7 +81,6 @@ async function downloadPDF(silent = false) {
         return
     }
     
-    // Target the visible invoice container instead of a hidden one
     const element = document.querySelector('.invoice-container')
     if (!element) {
         if (!silent) alert('Could not find receipt content.')
@@ -96,7 +90,6 @@ async function downloadPDF(silent = false) {
     try {
         const invoiceApi = (window as any).invoiceApi;
         if (invoiceApi) {
-            // Grab current styles to ensure fonts (Inter/JetBrains) carry over to the PDF
             const styles = Array.from(document.querySelectorAll('style, link[rel="stylesheet"]'))
                 .map(s => s.outerHTML)
                 .join('\n')
@@ -134,132 +127,105 @@ async function downloadPDF(silent = false) {
 
 function handleEditReceipt(receipt: Receipt) {
     activeTab.value = 'create'
-    // Give Vue time to mount the create tab if it wasn't active
     setTimeout(() => {
         if (receiptFormRef.value && 'loadReceipt' in receiptFormRef.value) {
             (receiptFormRef.value as any).loadReceipt(receipt)
         }
     }, 50)
-
 }
 </script>
 
 <template>
   <BranchSelection v-if="showSelection" />
   
-  <div v-else class="h-screen overflow-hidden bg-gray-100 p-4 printable-container-parent">
-    <div class="w-full mx-auto bg-white shadow-lg rounded-lg h-full flex flex-col printable-container-parent px-6">
-      <!-- Header -->
-      <header class="flex justify-between items-center p-6 border-b no-print pointer-events-auto">
+  <div v-else class="h-screen w-full bg-white flex flex-col overflow-hidden text-gray-900 box-border">
+    
+    <header class="flex justify-between items-center px-6 py-4 border-b bg-white z-10 shrink-0">
         <div class="flex items-center gap-4">
-            <h1 class="text-2xl font-bold text-gray-800">Invoice System</h1>
+            <h1 class="text-xl font-bold text-gray-800">Invoice System</h1>
             <div class="flex items-center gap-2">
-                <span class="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm font-medium flex items-center gap-2">
+                <span class="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-xs font-bold uppercase tracking-wider flex items-center gap-2">
                     {{ activeBranch?.name }}
                 </span>
                 <button 
                     @click="branchStore.setActiveBranch('')"
-                    class="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors no-print"
+                    class="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors"
                     title="Switch Profile"
                 >
                     <LogOut :size="16" />
                 </button>
             </div>
         </div>
-      </header>
+    </header>
 
-      <!-- Navigation Tabs -->
-      <div class="px-6 border-b border-gray-200 no-print">
-          <nav class="flex -mb-px space-x-2" aria-label="Tabs">
+    <div class="px-6 border-b border-gray-200 bg-gray-50/50 shrink-0">
+          <nav class="flex -mb-px space-x-1" aria-label="Tabs">
              <button 
               @click="setActiveTab('history')"
-              :class="['px-4 py-2 text-sm font-medium rounded-t-lg flex items-center gap-2 border-t border-x border-b', activeTab === 'history' ? 'border-gray-200 border-b-white bg-white text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300']"
+              :class="['px-4 py-3 text-sm font-bold flex items-center gap-2 border-b-2 transition-colors', activeTab === 'history' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700']"
             >
-              <History :size="18" />
-              Sales
+              <History :size="18" /> Sales
             </button>
             <button 
               @click="setActiveTab('create')"
-              :class="['px-4 py-2 text-sm font-medium rounded-t-lg flex items-center gap-2 border-t border-x border-b', activeTab === 'create' ? 'border-gray-200 border-b-white bg-white text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300']"
+              :class="['px-4 py-3 text-sm font-bold flex items-center gap-2 border-b-2 transition-colors', activeTab === 'create' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700']"
             >
-              <ReceiptIcon :size="18" />
-              Create Invoice
+              <ReceiptIcon :size="18" /> Create
             </button>
             <button 
               @click="setActiveTab('customers')"
-              :class="['px-4 py-2 text-sm font-medium rounded-t-lg flex items-center gap-2 border-t border-x border-b', activeTab === 'customers' ? 'border-gray-200 border-b-white bg-white text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300']"
+              :class="['px-4 py-3 text-sm font-bold flex items-center gap-2 border-b-2 transition-colors', activeTab === 'customers' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700']"
             >
-              <Users :size="18" />
-              Customers
+              <Users :size="18" /> Customers
             </button>
             <button 
               @click="setActiveTab('full')"
-              :class="['px-4 py-2 text-sm font-medium rounded-t-lg flex items-center gap-2 border-t border-x border-b', activeTab === 'full' ? 'border-gray-200 border-b-white bg-white text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300']"
+              :class="['px-4 py-3 text-sm font-bold flex items-center gap-2 border-b-2 transition-colors', activeTab === 'full' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700']"
             >
-              <FileText :size="18" />
-              Full Invoice
+              <FileText :size="18" /> Full View
             </button>
-             <button 
+            <button 
               v-if="activeBranch?.category === 'School'"
               @click="setActiveTab('check')"
-              :class="['px-4 py-2 text-sm font-medium rounded-t-lg flex items-center gap-2 border-t border-x border-b', activeTab === 'check' ? 'border-gray-200 border-b-white bg-white text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300']"
+              :class="['px-4 py-3 text-sm font-bold flex items-center gap-2 border-b-2 transition-colors', activeTab === 'check' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700']"
             >
-              <CheckSquare :size="18" />
-              Check
+              <CheckSquare :size="18" /> Check
             </button>
-             <button 
+            <button 
               @click="setActiveTab('inventory')"
-              :class="['px-4 py-2 text-sm font-medium rounded-t-lg flex items-center gap-2 border-t border-x border-b', activeTab === 'inventory' ? 'border-gray-200 border-b-white bg-white text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300']"
+              :class="['px-4 py-3 text-sm font-bold flex items-center gap-2 border-b-2 transition-colors', activeTab === 'inventory' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700']"
             >
-              <Package :size="18" />
-              Inventory
+              <Package :size="18" /> Inventory
             </button>
-             <button 
+            <button 
               @click="setActiveTab('backup')"
-              :class="['px-4 py-2 text-sm font-medium rounded-t-lg flex items-center gap-2 border-t border-x border-b', activeTab === 'backup' ? 'border-gray-200 border-b-white bg-white text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300']"
+              :class="['px-4 py-3 text-sm font-bold flex items-center gap-2 border-b-2 transition-colors', activeTab === 'backup' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700']"
             >
-              <Database :size="18" />
-              Backup
+              <Database :size="18" /> Backup
             </button>
           </nav>
       </div>
 
-      <!-- Main Content -->
-      <main class="flex-grow p-6 printable-container-parent">
-          <!-- Tab Content -->
-          <div v-if="activeTab === 'create'" class="printable-container-parent">
-            <div class="no-print">
-                <InvoiceForm 
-                  ref="receiptFormRef" 
-                  :onSaved="handleReceiptSaved" 
-                  @update:activeReceipt="(r: Receipt) => activeReceipt = r"
-                  @download="downloadPDF"
-                />
-            </div>
+      <main class="flex-grow overflow-hidden relative flex flex-col bg-gray-50">
+          
+          <div v-if="activeTab === 'create'" class="h-full overflow-y-auto p-6">
+            <InvoiceForm 
+                ref="receiptFormRef" 
+                :onSaved="handleReceiptSaved" 
+                @update:activeReceipt="(r: Receipt) => activeReceipt = r"
+                @download="downloadPDF"
+            />
           </div>
 
-          <!-- Customers View -->
-          <div v-else-if="activeTab === 'customers'">
+          <div v-else-if="activeTab === 'customers'" class="h-full flex flex-col p-6 overflow-hidden">
               <CustomerList @edit="handleEditReceipt" />
           </div>
 
-          <!-- Full Invoice View -->
-          <div v-else-if="activeTab === 'full'">
+          <div v-else-if="activeTab === 'full'" class="h-full flex flex-col p-6 overflow-hidden">
               <FullInvoiceView @edit="handleEditReceipt" />
           </div>
 
-          <!-- Check View (Schools Only) -->
-          <div v-else-if="activeTab === 'check'">
-               <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4 flex items-start gap-3">
-                 <CheckSquare class="text-blue-600 mt-0.5" :size="20" />
-                 <div>
-                     <h4 class="font-bold text-blue-800 text-sm">Monthly Payment Matrix</h4>
-                     <p class="text-blue-600 text-xs mt-1">
-                         Track student payments for each month. Green checks indicate paid invoices.
-                     </p>
-                 </div>
-            </div>
-
+          <div v-else-if="activeTab === 'check'" class="h-full overflow-y-auto p-6">
                <StudentPaymentMatrix 
                  :receipts="currentBranchReceipts" 
                  :customers="currentBranchCustomers"
@@ -267,25 +233,18 @@ function handleEditReceipt(receipt: Receipt) {
                />
            </div>
 
-
-          <!-- Inventory View -->
-          <div v-else-if="activeTab === 'inventory'">
+          <div v-else-if="activeTab === 'inventory'" class="h-full overflow-y-auto p-6">
               <InventoryManager />
           </div>
 
-          <!-- History View -->
-          <div v-else-if="activeTab === 'history'" class="printable-container-parent">
+          <div v-else-if="activeTab === 'history'" class="h-full overflow-y-auto p-6">
               <InvoiceHistory @edit="handleEditReceipt" />
           </div>
 
-          <!-- Backup & Restore View -->
-          <div v-else-if="activeTab === 'backup'">
+          <div v-else-if="activeTab === 'backup'" class="h-full overflow-y-auto p-6">
               <BackupManager />
           </div>
       </main>
-
-
-    </div>
   </div>
 </template>
 

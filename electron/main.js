@@ -110,7 +110,7 @@ app.whenReady().then(() => {
                 await workerWin.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
                 // Wait specifically for content to be ready instead of a long hardcoded delay
                 await workerWin.webContents.executeJavaScript('document.fonts.ready');
-                await new Promise(r => setTimeout(r, 50)); // Small buffer for image rendering
+                await new Promise(r => setTimeout(r, 50)); // Change 200 to 50
                 const pdfBuffer = await workerWin.webContents.printToPDF({
                     pageSize: 'A4',
                     landscape: true,

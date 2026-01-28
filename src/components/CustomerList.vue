@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, nextTick, onMounted, onUnmounted } from 'vue'
 import { useCustomerStore } from '../stores/customerStore'
-import { Download, Plus, Search, Trash2, Edit2, Upload, Users } from 'lucide-vue-next'
+import { Download, Plus, Search, Trash2, Edit2, Upload, Users, Loader2 } from 'lucide-vue-next'
 
 import { useBranchStore } from '../stores/branchStore'
 import { useReceiptStore, type Receipt } from '../stores/receiptStore'
@@ -10,20 +10,13 @@ const customerStore = useCustomerStore()
 const receiptStore = useReceiptStore()
 const branchStore = useBranchStore()
 
-// REMOVED: const { currentBranchCustomers } = storeToRefs(customerStore)
-
-// OPTIMIZATION STEP 1: Get raw list for branch
 const currentBranchCustomers = computed(() => 
     customerStore.customers.filter(c => c.branchId === branchStore.activeBranchId)
 )
 
-// OPTIMIZATION STEP 2: Sort ONCE. This only updates when the list changes, not when you type.
-const sortedBranchCustomers = computed(() => {
-    return [...currentBranchCustomers.value].sort((a, b) => a.name.localeCompare(b.name))
-})
-
 const searchQuery = ref('')
 const isAdding = ref(false)
+const isProcessing = ref(false) // New state for loading indicator
 const newCustomerName = ref('')
 const newCustomerContact = ref('')
 const editingCustomerId = ref<string | null>(null)
@@ -71,36 +64,43 @@ function handleCSVImport(event: Event) {
     const file = target.files?.[0]
     if (!file) return
 
-    const reader = new FileReader()
-    reader.onload = (e) => {
-        try {
-            const content = e.target?.result as string
-            const lines = content.split(/\r?\n/)
-            let startIndex = 0
-            if (lines.length > 0) {
-                const firstLine = lines[0]?.toLowerCase()
-                if (firstLine && (firstLine.includes('name') || firstLine.includes('contact') || firstLine.includes('phone'))) {
-                    startIndex = 1
+    isProcessing.value = true // START LOADING
+
+    // Small timeout to allow UI to update and show the spinner before heavy work
+    setTimeout(() => {
+        const reader = new FileReader()
+        reader.onload = (e) => {
+            try {
+                const content = e.target?.result as string
+                const lines = content.split(/\r?\n/)
+                let startIndex = 0
+                if (lines.length > 0) {
+                    const firstLine = lines[0]?.toLowerCase()
+                    if (firstLine && (firstLine.includes('name') || firstLine.includes('contact') || firstLine.includes('phone'))) {
+                        startIndex = 1
+                    }
                 }
-            }
-            let importCount = 0
-            for (let i = startIndex; i < lines.length; i++) {
-                const line = lines[i]?.trim()
-                if (!line) continue
-                const parts = line.split(/[;,]/).map(p => p.trim().replace(/^["']|["']$/g, ''))
-                if (parts.length >= 1 && parts[0]) {
-    if (!branchStore.activeBranchId) return // Safety check
-    customerStore.addCustomer({ name: parts[0], contact: parts[1] || '', branchId: branchStore.activeBranchId }, branchStore.activeBranchId)
-                    importCount++
+                let importCount = 0
+                for (let i = startIndex; i < lines.length; i++) {
+                    const line = lines[i]?.trim()
+                    if (!line) continue
+                    const parts = line.split(/[;,]/).map(p => p.trim().replace(/^["']|["']$/g, ''))
+                    if (parts.length >= 1 && parts[0]) {
+                        if (!branchStore.activeBranchId) return
+                        customerStore.addCustomer({ name: parts[0], contact: parts[1] || '', branchId: branchStore.activeBranchId }, branchStore.activeBranchId)
+                        importCount++
+                    }
                 }
+                alert(`Successfully imported ${importCount} customers!`)
+            } catch (error) {
+                alert('Failed to import CSV.')
+            } finally {
+                isProcessing.value = false // STOP LOADING
+                target.value = ''
             }
-            alert(`Successfully imported ${importCount} customers!`)
-        } catch (error) {
-            alert('Failed to import CSV.')
         }
-        target.value = ''
-    }
-    reader.readAsText(file)
+        reader.readAsText(file)
+    }, 100)
 }
 
 function handleAddCustomer() {
@@ -142,12 +142,13 @@ function deleteCustomer(id: string) {
   }
 }
 
-// OPTIMIZATION STEP 3: Filter the already-sorted list. Fast!
 const filteredAndSortedCustomers = computed(() => {
-    if (!searchQuery.value) return sortedBranchCustomers.value
-    
-    const q = searchQuery.value.toLowerCase()
-    return sortedBranchCustomers.value.filter(c => c.name.toLowerCase().includes(q))
+    let result = [...currentBranchCustomers.value]
+    if (searchQuery.value) {
+        const q = searchQuery.value.toLowerCase()
+        result = result.filter(c => c.name.toLowerCase().includes(q))
+    }
+    return [...result].sort((a, b) => a.name.localeCompare(b.name))
 })
 
 
@@ -164,13 +165,10 @@ async function downloadFullInvoice(customer: any) {
         return
     }
 
-    // Setup data for hidden container
     batchReceipts.value = receipts
     showBatchContainer.value = true
     
-    await nextTick() // Wait for Vue to update DOM
-    
-    // Short wait for DOM to fully render images/styles
+    await nextTick()
     await new Promise(r => setTimeout(r, 100))
 
     const container = document.getElementById('customer-batch-print-area')
@@ -191,15 +189,11 @@ async function downloadFullInvoice(customer: any) {
 
         const invoiceApi = (window as any).invoiceApi;
         if (invoiceApi) {
-             // 1. Get all individual invoice elements
              const invoiceElements = container.querySelectorAll('.invoice-container')
-             
-             // 2. Capture styles once
              const styles = Array.from(document.querySelectorAll('style, link[rel="stylesheet"]'))
                 .map(s => s.outerHTML)
                 .join('\n')
 
-             // 3. Construct HTML array for Electron
              const htmlInputs = Array.from(invoiceElements).map(el => `
                 <!DOCTYPE html>
                 <html>
@@ -217,16 +211,11 @@ async function downloadFullInvoice(customer: any) {
                 </html>
              `)
 
-             if (htmlInputs.length === 0) {
-                 throw new Error("No invoices rendered found")
-             }
+             if (htmlInputs.length === 0) throw new Error("No invoices rendered found")
 
-             // 4. Generate PDF via Electron (merges automatically)
              const pdfBuffer = await invoiceApi.generatePdf(htmlInputs)
              
-             if (!pdfBuffer || pdfBuffer.byteLength === 0) {
-                 throw new Error("Generated PDF buffer is empty");
-             }
+             if (!pdfBuffer || pdfBuffer.byteLength === 0) throw new Error("Generated PDF buffer is empty");
 
              const result = await invoiceApi.savePdf({
                  filename: filename,
@@ -236,21 +225,14 @@ async function downloadFullInvoice(customer: any) {
                  customPath: branchStore.activeBranch?.pdfFolderPath
              })
              
-             if(result.success) {
-                  alert(`Saved to ${result.path}`)
-             } else {
-                  console.error("Save failed:", result)
-                  alert(`Failed to save: ${result.error}`)
-             }
-        } else {
-            console.error('invoiceApi not found. Electron save-pdf will not be used.')
+             if(result.success) alert(`Saved to ${result.path}`)
+             else alert(`Failed to save: ${result.error}`)
         }
     } catch (error: any) {
-        console.error("Error generating batch PDF:", error)
         alert(`Failed to generate PDF: ${error.message || error}`)
     } finally {
         showBatchContainer.value = false
-        batchReceipts.value = [] // clear memory
+        batchReceipts.value = []
     }
 }
 
@@ -265,7 +247,7 @@ onUnmounted(() => {
 
 <template>
   <div class="h-full flex flex-col">
-    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 shrink-0">
         <div>
             <h2 class="text-xl font-black text-gray-900">Active Students</h2>
             <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{{ filteredAndSortedCustomers.length }} RECORDS SHOWING</p>
@@ -278,8 +260,7 @@ onUnmounted(() => {
         </div>
     </div>
 
-    <!-- Actions Area (Persistent) -->
-    <div class="flex gap-2 mb-6 no-print">
+    <div class="flex gap-2 mb-6 no-print shrink-0 items-center">
         <input type="file" ref="fileInput" @change="handleCSVImport" accept=".csv" class="hidden" />
         <button @click="triggerCSVImport" class="bg-white border border-gray-200 hover:bg-gray-50 text-gray-600 px-4 py-2 rounded-xl flex items-center gap-2 text-xs font-bold transition-all">
           <Upload :size="16" /> Import CSV
@@ -287,9 +268,14 @@ onUnmounted(() => {
         <button @click="isAdding = true" class="bg-blue-600 hover:bg-black text-white px-4 py-2 rounded-xl flex items-center gap-2 text-xs font-bold transition-all shadow-lg shadow-blue-100">
           <Plus :size="16" /> Add Customer
         </button>
+        
+        <div v-if="isProcessing" class="flex items-center gap-2 text-blue-600 bg-blue-50 px-3 py-2 rounded-xl ml-2 animate-pulse">
+            <Loader2 class="animate-spin" :size="16" />
+            <span class="text-xs font-bold">Processing...</span>
+        </div>
     </div>
 
-    <div v-if="isAdding" class="mb-8 bg-blue-50/50 p-6 rounded-2xl border border-blue-100/50 backdrop-blur-sm animate-in fade-in slide-in-from-top-4 duration-300">
+    <div v-if="isAdding" class="mb-8 bg-blue-50/50 p-6 rounded-2xl border border-blue-100/50 backdrop-blur-sm shrink-0">
         <h3 class="text-xs font-black text-blue-800 uppercase tracking-widest mb-4">{{ editingCustomerId ? 'Update Student Record' : 'Registry' }}</h3>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
             <div class="space-y-1">
@@ -309,9 +295,8 @@ onUnmounted(() => {
         </div>
     </div>
 
-    <!-- Student Grid -->
-    <div class="flex-grow">
-        <div v-if="filteredAndSortedCustomers.length > 0" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+    <div class="flex-grow overflow-y-auto min-h-0 custom-scrollbar pr-2">
+        <div v-if="filteredAndSortedCustomers.length > 0" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 pb-20">
             <div 
                 v-for="customer in filteredAndSortedCustomers" 
                 :key="customer.id"
@@ -332,7 +317,6 @@ onUnmounted(() => {
         </div>
     </div>
 
-    <!-- Custom Context Menu -->
     <div 
         v-if="contextMenu.show"
         class="fixed z-[100] bg-white rounded-2xl shadow-2xl border border-gray-100 py-2 min-w-[200px] animate-in fade-in zoom-in duration-100 backdrop-blur-xl bg-white/95"
@@ -354,24 +338,32 @@ onUnmounted(() => {
         </button>
     </div>
 
-
-    <!-- Hidden Batch Print Container -->
-    <div v-if="showBatchContainer" class="fixed inset-0 pointer-events-none opacity-0 overflow-hidden">
-        <div id="customer-batch-print-area">
-            <div v-for="(receipt, index) in batchReceipts" :key="receipt.id">
-                <div class="w-[297mm] h-[210mm] flex items-center justify-center bg-white">
-                    <InvoicePrintLayout :receipt="receipt" />
+    <Teleport to="body">
+        <div v-if="showBatchContainer" class="fixed top-0 left-0 w-px h-px opacity-0 overflow-hidden z-[-100]">
+            <div id="customer-batch-print-area">
+                <div v-for="receipt in batchReceipts" :key="receipt.id">
+                    <div class="w-[297mm] h-[210mm] flex items-center justify-center bg-white">
+                        <InvoicePrintLayout :receipt="receipt" />
+                    </div>
                 </div>
             </div>
         </div>
-    </div>
+    </Teleport>
   </div>
 </template>
 
 <style scoped>
-.page-break {
-    page-break-after: always;
-    height: 0;
-    overflow: hidden;
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 10px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
 }
 </style>
