@@ -149,7 +149,12 @@ app.whenReady().then(() => {
 
         const workerWin = new BrowserWindow({
             show: false,
-            webPreferences: { offscreen: true }
+            webPreferences: { 
+                offscreen: true,
+                nodeIntegration: true, // Requested by user
+                contextIsolation: false, // Requested by user
+                webSecurity: false   // Allows loading file:// paths
+            }
         })
 
         try {

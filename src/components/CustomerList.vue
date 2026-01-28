@@ -190,8 +190,15 @@ async function downloadFullInvoice(customer: any) {
         const invoiceApi = (window as any).invoiceApi;
         if (invoiceApi) {
              const invoiceElements = container.querySelectorAll('.invoice-container')
-             const styles = Array.from(document.querySelectorAll('style, link[rel="stylesheet"]'))
-                .map(s => s.outerHTML)
+             const styles = Array.from(document.querySelectorAll('link[rel="stylesheet"], style'))
+                .map(node => {
+                    // If it's a link tag (external CSS), recreate it using the absolute .href property
+                    if (node.tagName.toLowerCase() === 'link') {
+                        return `<link rel="stylesheet" href="${(node as HTMLLinkElement).href}">`
+                    }
+                    // If it's a <style> tag, just keep it as is
+                    return node.outerHTML
+                })
                 .join('\n')
 
              const htmlInputs = Array.from(invoiceElements).map(el => `
