@@ -1,73 +1,66 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { ref, computed } from 'vue'
 import { Check } from 'lucide-vue-next'
 import type { Receipt } from '../stores/receiptStore'
-import type { Customer } from '../stores/customerStore'
+import { useCustomerStore, type Customer } from '../stores/customerStore'
 
 const props = defineProps<{
     receipts: Receipt[],
     customers?: Customer[]
 }>()
 
+const customerStore = useCustomerStore()
+
 const months = [
     'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
     'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
 ]
 
+const selectedYear = ref(new Date().getFullYear())
+
 const matrixData = computed(() => {
-    // 1. Initialize with all customers
-    const studentMap: Record<string, Receipt[]> = {}
-    
-    // Add all registered customers first (even if they have no receipts)
-    if (props.customers) {
-        props.customers.forEach(customer => {
-             studentMap[customer.name] = []
-        })
-    }
-    
-    // 2. Map receipts to students
-    props.receipts.forEach(receipt => {
-        // Prefer studentName if set, otherwise fallback to receivedFrom (payer)
-        const name = receipt.studentName || receipt.receivedFrom
-        if (!name) return
+    // Iterate customers directly
+    if (!props.customers) return []
 
-        if (!studentMap[name]) {
-            studentMap[name] = []
+    const rows = props.customers.map(customer => {
+        const monthStatus = Array(12).fill(false)
+
+        for (let m = 0; m < 12; m++) {
+            const key = `${selectedYear.value}-${m}`
+            if (customer.paymentStatus && customer.paymentStatus[key]) {
+                monthStatus[m] = true
+            }
         }
-        studentMap[name].push(receipt)
-    })
-
-    // 2. Build rows
-    const rows = Object.entries(studentMap).map(([name, studentReceipts]) => {
-        const monthStatus = Array(12).fill(null)
-
-        studentReceipts.forEach(r => {
-            const date = new Date(r.date)
-            const monthIndex = date.getMonth() // 0-11
-            
-            // If multiple receipts in a month, just taking the last one for now, 
-            // or we could show a list. For simple tracking, just knowing "Paid" is enough.
-            monthStatus[monthIndex] = r
-        })
 
         return {
-            name,
+            id: customer.id,
+            name: customer.name,
             months: monthStatus
         }
     })
 
-    // 3. Sort by name
-    return [...rows].sort((a, b) => a.name.localeCompare(b.name))
+    return rows.sort((a, b) => a.name.localeCompare(b.name))
 })
 
-const emit = defineEmits<{
-    (e: 'view-receipt', receipt: Receipt): void
-}>()
+function toggleStatus(customerId: string, monthIndex: number) {
+    customerStore.togglePaymentStatus(customerId, selectedYear.value, monthIndex)
+}
+
 </script>
 
 <template>
-    <div class="bg-white rounded-lg shadow overflow-hidden border border-gray-200">
-        <div class="overflow-x-auto">
+    <div class="bg-white rounded-lg shadow overflow-hidden border border-gray-200 flex flex-col h-full">
+        <!-- New Header with Year Selector -->
+        <div class="p-4 border-b border-gray-200 flex justify-between items-center bg-gray-50/50">
+            <h3 class="font-bold text-gray-700">Payment Check Matrix</h3>
+            <div class="flex items-center gap-2">
+                <button @click="selectedYear--" class="p-1 hover:bg-gray-200 rounded text-gray-500 font-bold">&lt;</button>
+                <span class="font-bold text-gray-800">{{ selectedYear }}</span>
+                <button @click="selectedYear++" class="p-1 hover:bg-gray-200 rounded text-gray-500 font-bold">&gt;</button>
+            </div>
+        </div>
+
+        <div class="overflow-x-auto flex-grow">
             <table class="min-w-full divide-y divide-gray-200">
                 <thead class="bg-gray-50">
                     <tr>
@@ -84,18 +77,16 @@ const emit = defineEmits<{
                         <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 sticky left-0 bg-white z-10 border-r border-gray-200 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">
                             {{ row.name }}
                         </td>
-                        <td v-for="(receipt, index) in row.months" :key="index" class="px-2 py-4 whitespace-nowrap text-center text-sm text-gray-500">
-                            <div v-if="receipt" class="flex justify-center">
+                        <td v-for="(isPaid, index) in row.months" :key="index" class="px-2 py-4 whitespace-nowrap text-center text-sm">
+                            <div class="flex justify-center">
                                 <button 
-                                    @click="emit('view-receipt', receipt)" 
-                                    class="text-green-600 hover:text-green-800 transition-colors p-1 rounded-full hover:bg-green-50"
-                                    :title="`Paid: ${receipt.receiptNumber}`"
+                                    @click="toggleStatus(row.id, index)"
+                                    class="transition-all duration-200 p-1.5 rounded-full"
+                                    :class="isPaid ? 'bg-green-100 text-green-600 hover:bg-green-200' : 'bg-gray-100 text-gray-300 hover:bg-gray-200'"
                                 >
-                                    <Check :size="18" stroke-width="3" />
+                                    <Check :size="16" stroke-width="4" v-if="isPaid" />
+                                    <div v-else class="w-4 h-4 rounded-full border-2 border-gray-300"></div>
                                 </button>
-                            </div>
-                            <div v-else class="text-gray-200">
-                                -
                             </div>
                         </td>
                     </tr>

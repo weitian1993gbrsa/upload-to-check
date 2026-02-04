@@ -9,6 +9,7 @@ export interface Customer {
     studentId?: string
     branchId: string // Ensure customers are linked to a branch
     createdAt: number
+    paymentStatus?: Record<string, boolean> // Key: "YYYY-M" (e.g. "2026-0" for Jan)
 }
 
 export const useCustomerStore = defineStore('customer', () => {
@@ -22,6 +23,7 @@ export const useCustomerStore = defineStore('customer', () => {
         const newCustomer: Customer = {
             id: crypto.randomUUID(),
             createdAt: Date.now(),
+            paymentStatus: {},
             ...customer,
             branchId: (customer as any).branchId || branchId // Handle potential missing branchId in arg
         }
@@ -33,6 +35,20 @@ export const useCustomerStore = defineStore('customer', () => {
         const index = customers.value.findIndex(c => c.id === id)
         if (index !== -1 && customers.value[index]) {
             customers.value[index] = { ...customers.value[index], ...updates } as Customer
+        }
+    }
+
+    function togglePaymentStatus(customerId: string, year: number, month: number) {
+        const customer = customers.value.find(c => c.id === customerId)
+        if (customer) {
+            if (!customer.paymentStatus) customer.paymentStatus = {}
+            const key = `${year}-${month}`
+            // Toggle
+            if (customer.paymentStatus[key]) {
+                delete customer.paymentStatus[key]
+            } else {
+                customer.paymentStatus[key] = true
+            }
         }
     }
 
@@ -53,6 +69,7 @@ export const useCustomerStore = defineStore('customer', () => {
         addCustomer,
         updateCustomer,
         deleteCustomer,
+        togglePaymentStatus,
         initCustomerListener
     }
 })

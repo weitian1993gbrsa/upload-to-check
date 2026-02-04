@@ -19,7 +19,14 @@ const api = {
         ipcRenderer.invoke('generate-pdf', htmlContent),
 
     selectDirectory: () =>
-        ipcRenderer.invoke('select-directory')
+        ipcRenderer.invoke('select-directory'),
+
+    saveBackup: (content: string, filePath: string) =>
+        ipcRenderer.invoke('save-backup', { content, filePath }),
+
+    appReadyToQuit: () => ipcRenderer.invoke('app-ready-to-quit'),
+
+    onAppClosing: (callback: () => void) => ipcRenderer.on('app-closing', callback)
 }
 
 // Expose under both names to ensure compatibility across all components

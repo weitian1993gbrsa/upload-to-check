@@ -18,6 +18,8 @@ process.env.DIST = path.join(__dirname, '../dist')
 process.env.VITE_PUBLIC = app.isPackaged ? process.env.DIST : path.join(process.env.DIST, '../public')
 
 let win: BrowserWindow | null = null
+let isQuitting = false
+
 
 // 🚧 Use ['ENV_NAME'] avoid vite:define plugin - Vite@2.x
 const VITE_DEV_SERVER_URL = process.env['VITE_DEV_SERVER_URL']
@@ -39,6 +41,14 @@ function createWindow() {
         },
         autoHideMenuBar: true,
     })
+
+    win.on('close', (e) => {
+        if (!isQuitting) {
+            e.preventDefault()
+            win?.webContents.send('app-closing')
+        }
+    })
+
 
     if (VITE_DEV_SERVER_URL) {
         win.loadURL(VITE_DEV_SERVER_URL)
@@ -149,7 +159,7 @@ app.whenReady().then(() => {
 
         const workerWin = new BrowserWindow({
             show: false,
-            webPreferences: { 
+            webPreferences: {
                 offscreen: true,
                 nodeIntegration: true, // Requested by user
                 contextIsolation: false, // Requested by user
@@ -191,6 +201,20 @@ app.whenReady().then(() => {
         }
     })
 
+    ipcMain.handle('save-backup', async (_event, { content, filePath }) => {
+        try {
+            const dir = path.dirname(filePath)
+            if (!fs.existsSync(dir)) {
+                fs.mkdirSync(dir, { recursive: true })
+            }
+            await fs.promises.writeFile(filePath, content, 'utf-8')
+            return { success: true }
+        } catch (error: any) {
+            console.error('Backup save failed:', error)
+            return { success: false, error: error.message }
+        }
+    })
+
     ipcMain.handle('select-directory', async () => {
         if (!win) return null
         const result = await dialog.showOpenDialog(win, {
@@ -201,4 +225,9 @@ app.whenReady().then(() => {
         }
         return result.filePaths[0]
     })
+    ipcMain.handle('app-ready-to-quit', () => {
+        isQuitting = true
+        app.quit()
+    })
 })
+

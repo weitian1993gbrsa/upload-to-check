@@ -37,7 +37,8 @@ const settingsForm = ref({
     email: '',
     logo: '',
     logoPosition: 'watermark' as 'left' | 'center' | 'watermark',
-    logoOpacity: 0.1
+    logoOpacity: 0.1,
+    autoBackupEnabled: true
 })
 
 async function pickBranchFolder(branch: Branch, e: Event) {
@@ -164,7 +165,10 @@ function saveBranch() {
 }
 
 function saveSettings() {
-    branchStore.globalSettings = { ...settingsForm.value }
+    branchStore.globalSettings = { 
+        ...settingsForm.value,
+        autoBackupEnabled: settingsForm.value.autoBackupEnabled ?? true
+    }
     isSettingsOpen.value = false
 }
 

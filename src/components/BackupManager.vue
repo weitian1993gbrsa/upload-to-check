@@ -14,7 +14,7 @@ const inventoryStore = useInventoryStore()
 const fileInput = ref<HTMLInputElement | null>(null)
 const status = ref<{ type: 'success' | 'error' | 'idle' | 'loading', message: string }>({ type: 'idle', message: '' })
 
-function exportData() {
+async function exportData() {
     try {
         const backupData = {
             version: '1.0.0',
@@ -28,23 +28,36 @@ function exportData() {
             }
         }
 
-        const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' })
-        const url = URL.createObjectURL(blob)
-        const link = document.createElement('a')
+        const content = JSON.stringify(backupData, null, 2)
+        const targetPath = 'G:\\My Drive\\GB Rope Skipping Academy\\APP_SYSTEM\\GBRSA 2026 ATTENDANCE\\InvoiceSystem_Backup.json'
         
-        const now = new Date()
-        const dateStr = now.toISOString().split('T')[0]
-        const timeStr = now.getHours().toString().padStart(2, '0') + now.getMinutes().toString().padStart(2, '0')
-        link.href = url
-        link.download = `InvoiceSystem_Backup_${dateStr}_${timeStr}.json`
-        link.click()
+        const api = (window as any).invoiceApi
         
-        URL.revokeObjectURL(url)
-        
-        status.value = { type: 'success', message: 'Backup file generated and downloaded!' }
+        if (api && api.saveBackup) {
+            status.value = { type: 'loading', message: 'Saving backup...' }
+            const result = await api.saveBackup(content, targetPath)
+            
+            if (result.success) {
+                status.value = { type: 'success', message: 'Backup saved successfully!' }
+            } else {
+                throw new Error(result.error)
+            }
+        } else {
+            // Fallback for dev/browser (Original Logic)
+            const blob = new Blob([content], { type: 'application/json' })
+            const url = URL.createObjectURL(blob)
+            const link = document.createElement('a')
+            link.href = url
+            link.download = 'InvoiceSystem_Backup.json'
+            link.click()
+            URL.revokeObjectURL(url)
+            status.value = { type: 'success', message: 'Backup downloaded (Browser Mode)' }
+        }
+
         setTimeout(() => status.value = { type: 'idle', message: '' }, 3000)
-    } catch (e) {
-        status.value = { type: 'error', message: 'Failed to generate backup.' }
+    } catch (e: any) {
+        console.error(e)
+        status.value = { type: 'error', message: 'Failed to save backup: ' + (e.message || e) }
     }
 }
 

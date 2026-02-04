@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, nextTick, onMounted, onUnmounted } from 'vue'
+import { ref, computed, nextTick, onMounted, onUnmounted, watch } from 'vue'
 import { useCustomerStore } from '../stores/customerStore'
 import { Download, Plus, Search, Trash2, Edit2, Upload, Users, Loader2 } from 'lucide-vue-next'
 
@@ -21,6 +21,10 @@ const newCustomerName = ref('')
 const newCustomerContact = ref('')
 const editingCustomerId = ref<string | null>(null)
 const fileInput = ref<HTMLInputElement | null>(null)
+
+watch(newCustomerName, (val) => {
+    newCustomerName.value = val.toUpperCase()
+})
 
 // Context Menu State
 const contextMenu = ref({

@@ -44,6 +44,37 @@ onMounted(() => {
     receiptStore.initReceiptsListener()
     customerStore.initCustomerListener()
     inventoryStore.initInventoryListener()
+
+    // Auto Backup Listener
+    const api = (window as any).invoiceApi
+    if (api && api.onAppClosing) {
+        api.onAppClosing(async () => {
+            if (branchStore.globalSettings.autoBackupEnabled) {
+                 try {
+                    const backupData = {
+                        version: '1.0.0',
+                        timestamp: new Date().toISOString(),
+                        data: {
+                            receipts: receiptStore.receipts,
+                            branches: branchStore.branches,
+                            globalSettings: branchStore.globalSettings,
+                            customers: customerStore.customers,
+                            inventory: inventoryStore.items
+                        }
+                    }
+                    const content = JSON.stringify(backupData, null, 2)
+                    // Hardcoded path as per request (same as BackupManager)
+                    const targetPath = 'G:\\My Drive\\GB Rope Skipping Academy\\APP_SYSTEM\\GBRSA 2026 ATTENDANCE\\InvoiceSystem_Backup.json'
+                    
+                    await api.saveBackup(content, targetPath)
+                 } catch (e) {
+                     console.error("Auto Backup Failed", e)
+                 }
+            }
+            // Always permit quit after check
+            api.appReadyToQuit()
+        })
+    }
 })
 
 const activeTab = ref<'create' | 'customers' | 'full' | 'history' | 'inventory' | 'backup' | 'check'>('history')
@@ -147,6 +178,23 @@ function handleEditReceipt(receipt: Receipt) {
                 <span class="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-xs font-bold uppercase tracking-wider flex items-center gap-2">
                     {{ activeBranch?.name }}
                 </span>
+
+                <!-- Global Auto-Backup Toggle -->
+                <div class="flex items-center gap-2 bg-gray-100 px-3 py-1 rounded-full border border-gray-200 ml-2">
+                    <span class="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Auto-Backup</span>
+                    <button 
+                        @click="branchStore.updateGlobalSettings({ autoBackupEnabled: !branchStore.globalSettings.autoBackupEnabled })"
+                        class="relative inline-flex h-4 w-7 items-center rounded-full transition-colors focus:outline-none focus:ring-1 focus:ring-blue-500 focus:ring-offset-1"
+                        :class="branchStore.globalSettings.autoBackupEnabled ? 'bg-blue-600' : 'bg-gray-300'"
+                        title="When ON: Automatically backs up data to G: Drive on exit."
+                    >
+                        <span 
+                            class="inline-block h-2.5 w-2.5 transform rounded-full bg-white transition-transform"
+                            :class="branchStore.globalSettings.autoBackupEnabled ? 'translate-x-3.5' : 'translate-x-0.5'"
+                        />
+                    </button>
+                </div>
+
                 <button 
                     @click="branchStore.setActiveBranch('')"
                     class="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors"
@@ -164,7 +212,7 @@ function handleEditReceipt(receipt: Receipt) {
               @click="setActiveTab('history')"
               :class="['px-4 py-3 text-sm font-bold flex items-center gap-2 border-b-2 transition-colors', activeTab === 'history' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700']"
             >
-              <History :size="18" /> Sales
+              <History :size="18" /> Invoice History
             </button>
             <button 
               @click="setActiveTab('create')"
@@ -204,7 +252,7 @@ function handleEditReceipt(receipt: Receipt) {
               <Database :size="18" /> Backup
             </button>
           </nav>
-      </div>
+    </div>
 
       <main class="flex-grow overflow-hidden relative flex flex-col bg-gray-50">
           
@@ -229,7 +277,7 @@ function handleEditReceipt(receipt: Receipt) {
                <StudentPaymentMatrix 
                  :receipts="currentBranchReceipts" 
                  :customers="currentBranchCustomers"
-                 @view-receipt="r => handleEditReceipt(r)" 
+                 @view-receipt="(r: any) => handleEditReceipt(r)" 
                />
            </div>
 
@@ -238,7 +286,7 @@ function handleEditReceipt(receipt: Receipt) {
           </div>
 
           <div v-else-if="activeTab === 'history'" class="h-full overflow-y-auto p-6">
-              <InvoiceHistory @edit="handleEditReceipt" />
+              <InvoiceHistory @edit="handleEditReceipt" @create="setActiveTab('create')" />
           </div>
 
           <div v-else-if="activeTab === 'backup'" class="h-full overflow-y-auto p-6">

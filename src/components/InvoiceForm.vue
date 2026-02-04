@@ -48,11 +48,23 @@ const form = ref({
 const editingId = ref<string | null>(null)
 const overriddenReceiptNumber = ref('')
 
+// Optimization logic
+const debouncedCustomerQuery = ref('')
+const debouncedInventoryQuery = ref('')
+
+// Watch for changes in customer input and debounce the search query update
+// Watch for changes in customer input and debounce the search query update
+// REMOVED: Watcher caused recursive updates and lag. Now handled in handleReceivedFromInput.
+
+const debounceCustomerSearch = useDebounceFn((newVal: string) => {
+    debouncedCustomerQuery.value = newVal
+}, 300)
+
 // Auto-complete logic for Received From
 const showSuggestions = ref(false)
 const filteredCustomers = computed(() => {
-    if (!form.value.receivedFrom) return []
-    const query = form.value.receivedFrom.toLowerCase()
+    if (!debouncedCustomerQuery.value) return []
+    const query = debouncedCustomerQuery.value.toLowerCase()
     
     // Optimization: If query is empty, don't return anything (already handled above)
     
@@ -65,6 +77,9 @@ function selectCustomer(customer: any) {
     // 1. Update values
     form.value.receivedFrom = customer.name
     form.value.contact = customer.contact || ''
+    
+    // Update the debounced query immediately to hide dropdown if needed or keep it in sync
+    debouncedCustomerQuery.value = customer.name
     
     // 2. FORCE close the suggestions immediately
     showSuggestions.value = false
@@ -82,11 +97,23 @@ const sortedInventoryItems = computed(() => {
         .sort((a, b) => a.name.localeCompare(b.name))
 })
 
+// Watch for changes in the ACTIVE item's description
+watch(() => {
+    if (activeItemIndex.value === null) return ''
+    const item = form.value.items[activeItemIndex.value]
+    return item ? item.description : ''
+}, (newVal) => {
+    debounceInventorySearch(newVal)
+})
+
+const debounceInventorySearch = useDebounceFn((newVal: string) => {
+    debouncedInventoryQuery.value = newVal
+}, 300)
+
 const filteredInventory = computed(() => {
     if (activeItemIndex.value === null) return []
-    const item = form.value.items[activeItemIndex.value]
-    if (!item) return []
-    const currentInput = item.description.toLowerCase()
+    // Use the DEBOUNCED query instead of the direct input
+    const currentInput = debouncedInventoryQuery.value.toLowerCase()
     if (!currentInput) return []
     
     // Use the pre-sorted list
@@ -106,8 +133,34 @@ function selectInventoryItem(item: InventoryItem, index: number) {
         formItem.amount = item.price
         formItem.quantity = 1
     }
+    // Update query to match selection so it doesn't pop up again weirdly
+    debouncedInventoryQuery.value = item.name
+    
     // FORCE close the suggestions
     activeItemIndex.value = null
+}
+
+function handleReceivedFromInput(event: Event) {
+    const target = event.target as HTMLInputElement
+    // Apply Uppercase Mask
+    const start = target.selectionStart;
+    const end = target.selectionEnd;
+    const uppercased = target.value.toUpperCase()
+    
+    // Only update if changed to avoid unnecessary cycles
+    if (form.value.receivedFrom !== uppercased) {
+        form.value.receivedFrom = uppercased
+        
+        // Restore cursor position if needed (Vue v-model usually handles this but manual update might jump)
+        // With simple uppercase, length is preserved, so usually safe.
+        // We force the input value to match immediately to prevent visual glitch
+        target.value = uppercased
+        if (start !== null && end !== null) {
+            target.setSelectionRange(start, end);
+        }
+    }
+
+    debounceCustomerSearch(uppercased)
 }
 
 const isCustomerModalOpen = ref(false)
@@ -126,6 +179,7 @@ const modalFilteredCustomers = computed(() => {
 function selectCustomerFromModal(customer: any) {
     form.value.receivedFrom = customer.name
     form.value.contact = customer.contact || ''
+    debouncedCustomerQuery.value = customer.name // Sync
     isCustomerModalOpen.value = false
     customerSearch.value = ''
 }
@@ -236,32 +290,37 @@ const receiptNumber = computed(() => {
   return receiptStore.generateReceiptNumber(prefix, form.value.date, branchStore.activeBranchId || '')
 })
 
-const draftReceipt = computed<Receipt>(() => ({
-    id: 'draft',
-    branchId: branchStore.activeBranchId || '',
-    receiptNumber: receiptNumber.value,
-    date: form.value.date,
-    receivedFrom: form.value.receivedFrom || 'Client Name',
-    contact: form.value.contact,
-    items: form.value.items.map(i => ({
-        ...i, 
-        amount: Number(i.amount) || 0,
-        discount: Number(i.discount) || 0,
-        quantity: Number(i.quantity) || 1
-    })),
-    paymentMethod: form.value.paymentMethod,
-    receivedBy: 'Admin', // Static for draft
-    status: form.value.status,
-    createdAt: Date.now()
-}))
-
-const debouncedEmit = useDebounceFn((val: Receipt) => {
-    emit('update:activeReceipt', val)
+// Optimization: Construct draft receipt only when emitting, and debounce it
+const emitDraftReceipt = useDebounceFn(() => {
+    const receipt: Receipt = {
+        id: 'draft',
+        branchId: branchStore.activeBranchId || '',
+        receiptNumber: receiptNumber.value,
+        date: form.value.date,
+        receivedFrom: form.value.receivedFrom || 'Client Name',
+        contact: form.value.contact,
+        items: form.value.items.map(i => ({
+            ...i, 
+            amount: Number(i.amount) || 0,
+            discount: Number(i.discount) || 0,
+            quantity: Number(i.quantity) || 1
+        })),
+        paymentMethod: form.value.paymentMethod,
+        receivedBy: 'Admin', // Static for draft
+        status: form.value.status,
+        createdAt: Date.now()
+    }
+    emit('update:activeReceipt', receipt)
 }, 300)
 
-watch(() => draftReceipt.value, (newVal: Receipt) => {
-    debouncedEmit(newVal)
-}, { immediate: true, deep: true })
+// Watch dependencies that should trigger a draft update
+watch(
+    [() => form.value, () => activeBranch.value, () => receiptNumber.value],
+    () => {
+        emitDraftReceipt()
+    },
+    { deep: true, immediate: true }
+)
 
 
 function addItem() {
@@ -414,7 +473,8 @@ defineExpose({
                     <div class="flex gap-2">
                         <div class="relative flex-grow">
                             <input 
-                                v-model="form.receivedFrom" 
+                                :value="form.receivedFrom"
+                                @input="handleReceivedFromInput"
                                 type="text" 
                                 placeholder="Search or enter name..." 
                                 class="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 p-2 border"

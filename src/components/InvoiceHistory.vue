@@ -2,12 +2,13 @@
 import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { useReceiptStore } from '../stores/receiptStore'
 
-import { Trash2, Search, FileText, Eye, Download, Edit2, X, Loader2 } from 'lucide-vue-next'
+import { Trash2, Search, FileText, Eye, Download, Edit2, X, Loader2, Plus } from 'lucide-vue-next'
 import type { Receipt } from '../stores/receiptStore'
 import { format, parseISO } from 'date-fns'
 import InvoicePreview from './InvoicePreview.vue'
 import { useBranchStore } from '../stores/branchStore'
 import InvoicePrintLayout from './InvoicePrintLayout.vue'
+import BulkInvoiceModal from './BulkInvoiceModal.vue'
 
 const receiptStore = useReceiptStore()
 const branchStore = useBranchStore()
@@ -20,6 +21,7 @@ const currentBranchReceipts = computed(() =>
 
 const emit = defineEmits<{
     (e: 'edit', receipt: Receipt): void
+    (e: 'create'): void
 }>()
 
 const searchQuery = ref('')
@@ -37,6 +39,7 @@ type StudentGroup = {
     receipts: Receipt[];
 }
 const bulkStudentGroups = ref<StudentGroup[]>([])
+const isBulkCreateOpen = ref(false) // State for Bulk Create Modal
 
 const availableMonths = computed(() => {
     const months = new Set<string>()
@@ -199,7 +202,7 @@ async function bulkExportFilteredStudents() {
         // 2. Render ALL students at once
         const groupsData: StudentGroup[] = students.map(name => ({
             studentName: name,
-            receipts: studentGroups[name]!.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+            receipts: studentGroups[name]!.sort((a, b) => b.receiptNumber.localeCompare(a.receiptNumber, undefined, { numeric: true }))
         }));
         
         bulkStudentGroups.value = groupsData;
@@ -342,6 +345,23 @@ onUnmounted(() => {
                             class="pl-10 w-full border-gray-300 rounded-lg shadow-sm border p-2.5 focus:ring-blue-500 focus:border-blue-500 text-sm"
                         />
                     </div>
+                    
+                    
+                    <button 
+                        @click="emit('create')"
+                        class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-bold hover:bg-blue-700 shadow-sm transition-all flex items-center gap-2 whitespace-nowrap"
+                    >
+                        <Plus :size="18" />
+                        Create New Invoice
+                    </button>
+                    
+                    <button 
+                        @click="isBulkCreateOpen = true"
+                        class="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-bold hover:bg-green-700 shadow-sm transition-all flex items-center gap-2 whitespace-nowrap"
+                    >
+                        <Users :size="18" />
+                        Bulk Create
+                    </button>
                     
                     <button 
                         @click="bulkExportFilteredStudents"
@@ -489,5 +509,7 @@ onUnmounted(() => {
             </div>
         </Teleport>
 
+        <!-- Bulk Invoice Modal -->
+        <BulkInvoiceModal v-model="isBulkCreateOpen" @generated="selectedMonth = 'all'" />
     </div>
 </template>

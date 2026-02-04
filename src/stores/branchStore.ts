@@ -23,6 +23,7 @@ interface GlobalSettings {
     logo: string
     logoPosition: 'left' | 'center' | 'watermark'
     logoOpacity: number
+    autoBackupEnabled: boolean
 }
 
 export const useBranchStore = defineStore('branch', () => {
@@ -37,7 +38,8 @@ export const useBranchStore = defineStore('branch', () => {
         email: 'weitian1993.gbrsa@gmail.com',
         logo: '',
         logoPosition: 'watermark',
-        logoOpacity: 0.1
+        logoOpacity: 0.1,
+        autoBackupEnabled: true
     })
 
     const activeBranchId = useStorage<string>('activeBranchId', '')
